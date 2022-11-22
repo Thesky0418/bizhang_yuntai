@@ -106,5 +106,5 @@ int uart2_send_up(void)
     rt_kprintf("%c\n",ch);
     return 0;
 }
-
-
+MSH_CMD_EXPORT(uart2_send_down,DOWM);
+MSH_CMD_EXPORT(uart2_send_up,UP);

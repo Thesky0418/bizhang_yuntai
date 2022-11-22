@@ -12,6 +12,7 @@
 #include "ov_pid.h"
 #include "uart2.h"
 #include "tcs347225.h"
+#include "car.h"
 #define DBG_TAG "test"
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
@@ -35,7 +36,7 @@ int xuanzhuan = 0;
 int flag3 = 0;
 int flag4=0;
 int angle = 50;
-rt_int32_t zhangai=0; //障碍<75 右侧 zhangai<0
+rt_int8_t fangxiang=0; //1左 -1右
 rt_uint32_t nums=0;
 rt_uint8_t red_flag;
 int test_1(void)
@@ -52,32 +53,70 @@ int test_1(void)
     straight_pid_init();
     qiwang = 60;
     rt_pwm_set(direction_dev,DIRECTION_CHANNEL, direction_period, direction_period*60/1000);
-    car_start();
+
     while(stop_flag==0)
     {
           //确定障碍方向
-          red_flag=0;
-          rt_thread_delay(200);
-          if(red_flag==1)
-          {
-             nums++;
-          }
-          if(nums<=20&&red_flag==1)
-          {
-              if(ov_pulse>75)
-                  zhangai+=1;
-              else if(ov_pulse<75)
-                  zhangai-=1;
-          }
+//          red_flag=0;
+//          rt_thread_delay(200);
+//          if(red_flag==1)
+//          {
+//             nums++;
+//          }
+//          if(nums<=20&&red_flag==1)
+//          {
+//              if(ov_pulse>75)
+//                  zhangai+=1;
+//              else if(ov_pulse<75)
+//                  zhangai-=1;
+//          }
+            rt_uint8_t tt=75,n=0;
+            rt_uint8_t fangxiang1=0;
+            ov_stop_flag=0;
+            red_flag=0;
+            rt_thread_mdelay(50);
+            while(1)
+            {
+               rt_pwm_set(ov_dev, OV_CHANNEL, ov_period, ov_period*tt/1000);
+               if(red_flag==1)
+                   break;
+               n=1;
+               if(fangxiang1==0)
+                  tt+=1;
+               else if(fangxiang1==1)
+                  tt-=1;
+               if(tt>=100)
+                  fangxiang1=1;
+               else if(tt<=40)
+                   fangxiang1=0;
+               rt_thread_mdelay(20);
+            }
+            if(n==1)
+              ov_pulse = tt;
+            if(ov_pulse>80)
+            {
+                fangxiang=1;
+ //               qiwang = 75;
+            }
+            else if(ov_pulse<70)
+              fangxiang=-1;
+            else {
+                fangxiang=0;
+            }
 
+            ov_stop_flag=1;
+            rt_thread_mdelay(50);
+            car_start();
+            rt_kprintf("fangxiang = %d\n",fangxiang);
           //障碍<75 右侧 zhangai<0
-          if(jg_val<=qiwang)
+          while(jg_val>qiwang)
           {
-              LOG_D("------------%d\n",jg_val);
+              //LOG_D("------------%d\n",jg_val);
               //关闭巡目标物体
-              stop_flag=1;
+              rt_thread_mdelay(50);
           }
-          rt_thread_delay(200);
+          LOG_D("------------%d\n",jg_val);
+          stop_flag=1;
     }
     car_stop();
     return 0;
@@ -94,23 +133,67 @@ int test_2(void)
     angle = 55;
     car_start();
 
-    //向右旋转直到舵机角度达到目标值
+    //向左旋转直到舵机角度达到目标值
     while(xuanzhuan==0)
     {
-        car_left_forward();     //右旋转
-        rt_thread_delay(200);
+        rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*35/1000);
+        rt_pwm_set(right_dev, 1, 1000000, 30*10000); //右
+        rt_pwm_set(right_dev, 2, 1000000, 20*10000); //左
+        //左旋转
+        rt_thread_delay(100);
         if(ov_pulse<=angle)
             xuanzhuan = 1;
 
     }
+    if(fangxiang>0)
+        rt_thread_mdelay(200);
     rt_pwm_set(right_dev, 1, 1000000, 30*10000); //右
-    rt_pwm_set(right_dev, 2, 1000000, 40*10000); //左
+    rt_pwm_set(right_dev, 2, 1000000, 35*10000); //左
     rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*75/1000);
-    rt_thread_mdelay(500);
+    if(fangxiang>0)
+        rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*85/1000);
+    if(fangxiang==0)
+        rt_thread_mdelay(800);
+    else if(fangxiang>0)
+    {
+        rt_pwm_set(right_dev, 1, 1000000, 20*10000); //右
+        rt_pwm_set(right_dev, 2, 1000000, 40*10000); //左
+        rt_thread_mdelay(1600);
+    }
+    else {
+        rt_pwm_set(right_dev, 1, 1000000, 20*10000); //右
+        rt_pwm_set(right_dev, 2, 1000000, 40*10000); //左
+        rt_thread_mdelay(300);
+    }
     rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*55/1000);
     rt_pwm_set(right_dev, 1, 1000000, 30*10000); //右
     rt_pwm_set(right_dev, 2, 1000000, 30*10000); //左
+    if(fangxiang==0)
+        rt_thread_mdelay(150);
+    else if(fangxiang>0)
+        rt_thread_mdelay(150);
+    else {
+        rt_thread_mdelay(150);
+    }
+
+    rt_pin_write(AIN1_PIN, PIN_LOW);
+    rt_pin_write(AIN2_PIN, PIN_HIGH);
+    rt_pin_write(BIN1_PIN, PIN_LOW);
+    rt_pin_write(BIN2_PIN, PIN_HIGH);
+
+    if(fangxiang>0)
+        rt_thread_mdelay(600);
+    else if(fangxiang==0)
+        rt_thread_mdelay(500);
+    else {
+//        rt_thread_mdelay(500);
+    }
     car_stop();
+    rt_pin_write(AIN1_PIN, PIN_HIGH);
+    rt_pin_write(AIN2_PIN, PIN_LOW);
+    rt_pin_write(BIN1_PIN, PIN_HIGH);
+    rt_pin_write(BIN2_PIN, PIN_LOW);
+
 
     //关闭ov寻物，设置ov为中值，pid清零，旋转舵机为左偏
     ov_stop_flag=0;
@@ -156,24 +239,39 @@ int test_3(void)
     ov_pulse = lll;
     ov_stop_flag=1;
     car_start();
+
+    rt_uint16_t target=0;
+    if(fangxiang == 0)
+    {
+        target = 70;
+    }
+    else if(fangxiang>0) //zuo
+    {
+        target = 70;
+    }
+    else {
+        target = 50;
+    }
+
+    //达到目标距离
+    while(jg_val>=target)
+    {
+        stop_flag=0;
+        rt_thread_mdelay(100);
+    }
+    rt_kprintf("jg_val:%d\n",jg_val);
     //自动车巡物
     while((flag3 == 0))
     {
-        //达到目标距离
-        while(jg_val>=80)
-        {
-            stop_flag=0;
-            rt_thread_mdelay(100);
-        }
         //关闭自动车寻物
         stop_flag=1;
         //右轮打死，舵机达到目标角度退出
         rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*85/1000);
         rt_pwm_set(right_dev, 1, 1000000, 20*10000); //右
-        rt_pwm_set(right_dev, 2, 1000000, 40*10000); //左
+        rt_pwm_set(right_dev, 2, 1000000, 35*10000); //左
         if(ov_pulse>=100)
             flag3 = 1;
-        rt_thread_mdelay(200);
+        rt_thread_mdelay(100);
     }
 //    rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*85/1000);
     car_stop();
@@ -277,16 +375,24 @@ int test_55(void)
     ov_stop_flag=0;
     car_start();
 
-    int direction_pulse=85;
+    int direction_pulse=120;
 
     //右轮打死右转
     rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*direction_pulse/1000);
-    rt_pwm_set(right_dev, 1, 1000000, 40*10000); //右
-    rt_pwm_set(right_dev, 2, 1000000, 25*10000); //左
-    rt_thread_mdelay(1500);
+    rt_pwm_set(right_dev, 1, 1000000, 25*10000); //右
+    rt_pwm_set(right_dev, 2, 1000000, 40*10000); //左
+    if(fangxiang>0)
+     rt_thread_mdelay(500);
+    else if(fangxiang==0) {
+        rt_thread_mdelay(1500);
+    }
+    else {
+        rt_thread_mdelay(3000);
+    }
+
     //旋转延时
     rt_uint8_t ttt=0;
-    if(zhangai<=0) //障碍在右侧
+    if(fangxiang<0) //障碍在右侧
        {
            rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*80/1000);
            rt_kprintf("~80~\n");
@@ -300,7 +406,7 @@ int test_55(void)
 
     rt_pwm_set(right_dev, 1, 1000000, 30*10000); //右
     rt_pwm_set(right_dev, 2, 1000000, 30*10000); //左
-    rt_thread_mdelay(800);
+    rt_thread_mdelay(500);
     if(ttt==0)
     {
        rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*30/1000);
@@ -312,8 +418,13 @@ int test_55(void)
     //最后反方向走一段
     car_stop();
     red_flag=0;
+    uart2_send_down();
+    ov_pulse=75;
+    rt_pwm_set(ov_dev,OV_CHANNEL , ov_period, ov_period*ov_pulse/1000);
+    rt_thread_mdelay(200);
     rt_uint8_t tt=ov_pulse;
     rt_uint8_t fangxiang=0;
+    rt_uint8_t numss=0;
     while(1)
     {
        rt_pwm_set(ov_dev, OV_CHANNEL, ov_period, ov_period*tt/1000);
@@ -324,10 +435,20 @@ int test_55(void)
        else if(fangxiang==1)
            tt-=5;
        if(tt>=130)
-          fangxiang=1;
+       {
+            fangxiang=1;
+            numss++;
+       }
+
        else if(tt<=20)
+       {
            fangxiang=0;
+           numss++;
+       }
+
        rt_thread_mdelay(300);
+       if(numss==2)
+           uart2_send_up();
     }
     ov_pulse = tt;
     //扫描到红色
@@ -354,7 +475,7 @@ int test_55(void)
 
 int test_5(void)
 {
-    int direction_pulse=85;
+    int direction_pulse=120;
     int test_ov = 75;
 //    rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*55/1000);
 //    rt_thread_mdelay(500);
@@ -375,10 +496,10 @@ int test_5(void)
     ov_pulse = test_ov;
 
     OV_UP;
-    rt_thread_mdelay(2500); //旋转延时
+    rt_thread_mdelay(500); //旋转延时
     OV_DOWM;
     rt_uint8_t ffff=0;
-    if(zhangai<=0) //障碍在右侧
+    if(fangxiang<=0) //障碍在右侧
     {
         rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*80/1000);
         rt_kprintf("~80~\n");
@@ -388,14 +509,15 @@ int test_5(void)
         rt_kprintf("~40~\n");
         ffff=1;
     }
-    rt_thread_mdelay(900);
+    rt_thread_mdelay(500);
+    //反向走一段
     if(ffff==1)
       rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*70/1000);
     else if (ffff==0) {
         rt_pwm_set(direction_dev, DIRECTION_CHANNEL, direction_period, direction_period*40/1000);
     }
     rt_pwm_set(left_dev, 2, speed_period, speed_period *speed_pulse/100); //30
-    rt_thread_mdelay(1600);
+    rt_thread_mdelay(500);
     car_stop();
 
     red_flag=0;
